@@ -1,0 +1,595 @@
+CREATE TABLE Place (
+    id INTEGER PRIMARY KEY,
+    name NVARCHAR2(100) NOT NULL,
+    height INTEGER NOT NULL CHECK (height >= 0),
+    CONSTRAINT unique_place UNIQUE (name)
+);
+
+CREATE TABLE Edge (
+    id INTEGER PRIMARY KEY,
+    start_point INTEGER NOT NULL REFERENCES Place,
+    end_point INTEGER NOT NULL REFERENCES Place,
+    time_to INTEGER NOT NULL CHECK (time_to >= 0),
+    time_from INTEGER NOT NULL CHECK (time_from >= 0),
+    distance INTEGER NOT NULL CHECK (distance >= 0),
+    colour VARCHAR(40) NOT NULL,
+    CONSTRAINT unique_edge UNIQUE (start_point, end_point)
+);
+
+CREATE TABLE Route (
+    id INTEGER PRIMARY KEY,
+    segment INTEGER NOT NULL CHECK (segment >= 0),
+    distance INTEGER NOT NULL CHECK (distance >= 0),
+    time INTEGER NOT NULL CHECK (time >= 0),
+    height_to_go_up INTEGER NOT NULL CHECK (height_to_go_up >= 0),
+    height_to_go_down INTEGER NOT NULL CHECK (height_to_go_down >= 0)
+);
+
+CREATE TABLE RouteSegment (
+    place_id INTEGER NOT NULL REFERENCES Place,
+    route_id INTEGER NOT NULL REFERENCES Route,
+    position INTEGER NOT NULL CHECK (position >= 1),
+    PRIMARY KEY(place_id, route_id, position)
+);
+
+--Deletes all route segments describing the deleted route
+CREATE OR REPLACE TRIGGER deleteRoute
+AFTER DELETE ON Route
+FOR EACH ROW
+BEGIN
+    DELETE RouteSegment WHERE route_id = :OLD.id;
+END;
+/
+
+--Updates distance, time, height_to_go_up and height_to_go_down fields in the route consisting of added segment
+CREATE OR REPLACE TRIGGER updateRouteIns
+BEFORE INSERT ON RouteSegment
+FOR EACH ROW
+DECLARE
+edge_id INTEGER;
+prev_place INTEGER;
+walk_time INTEGER;
+height1 INTEGER;
+height2 INTEGER;
+BEGIN 
+    BEGIN
+        SELECT id INTO prev_place FROM Place WHERE id IN (SELECT place_id FROM RouteSegment WHERE route_id = :NEW.route_id AND position = :NEW.position - 1);
+
+        EXCEPTION WHEN NO_DATA_FOUND THEN
+            prev_place := NULL;
+    END;
+
+    IF (prev_place IS NOT NULL) THEN
+        BEGIN 
+            SELECT id INTO edge_id FROM Edge WHERE start_point = prev_place AND end_point = :NEW.place_id;
+            SELECT time_to INTO walk_time FROM Edge WHERE edge_id = id;
+
+            EXCEPTION WHEN NO_DATA_FOUND THEN
+                SELECT id INTO edge_id FROM Edge WHERE end_point = prev_place AND start_point = :NEW.place_id;
+                SELECT time_from INTO walk_time FROM Edge WHERE edge_id = id;
+        END;
+
+        UPDATE Route SET distance = distance + (SELECT distance FROM Edge WHERE Edge.id = edge_id) WHERE id = :NEW.route_id;
+        UPDATE Route SET time = time + walk_time WHERE id = :NEW.route_id;
+        SELECT MAX(height) INTO height1 FROM Place WHERE Place.id = prev_place;
+        SELECT MAX(height) INTO height2 FROM Place WHERE Place.id = :NEW.place_id;
+
+        IF (height1 > height2) THEN
+            UPDATE Route SET height_to_go_down = height_to_go_down + height1 - height2 WHERE id = :NEW.route_id;
+        ELSE
+            UPDATE Route SET height_to_go_up = height_to_go_up + height2 - height1 WHERE id = :NEW.route_id;
+        END IF;
+    END IF;
+END;
+/
+
+INSERT INTO Place VALUES (1, 'Adamcula', 431);
+INSERT INTO Place VALUES (2, 'Baranec', 561);
+INSERT INTO Place VALUES (3, 'Bobrowiecka Przełęcz', 606);
+INSERT INTO Place VALUES (4, 'Bobrowiecki Żleb', 1954);
+INSERT INTO Place VALUES (5, 'Brama Kraszewskiego', 1523);
+INSERT INTO Place VALUES (6, 'Brzeziny', 1114);
+INSERT INTO Place VALUES (7, 'Bubon', 1745);
+INSERT INTO Place VALUES (8, 'Bulwary Słowackiego', 592);
+INSERT INTO Place VALUES (9, 'Bystra Przełęcz', 2049);
+INSERT INTO Place VALUES (10, 'Bystrá', 1740);
+INSERT INTO Place VALUES (11, 'Bystrá dolina', 223);
+INSERT INTO Place VALUES (12, 'Błyszcz', 1508);
+INSERT INTO Place VALUES (13, 'Chuda Przełęcz', 1735);
+INSERT INTO Place VALUES (14, 'Ciemniak', 105);
+INSERT INTO Place VALUES (15, 'Czarny Staw Gąsienicowy', 1751);
+INSERT INTO Place VALUES (16, 'Czarny Staw Gąsienicowy (1)', 1222);
+INSERT INTO Place VALUES (17, 'Czarny Staw pod Rysami', 1031);
+INSERT INTO Place VALUES (18, 'Czerwona Przełęcz', 1332);
+INSERT INTO Place VALUES (19, 'Czerwone Brzeżki', 1960);
+INSERT INTO Place VALUES (20, 'Czerwone Stawki', 400);
+INSERT INTO Place VALUES (21, 'Dol. Kościeliska - Jaskinia Mroźna', 2369);
+INSERT INTO Place VALUES (22, 'Dolina Białego', 1857);
+INSERT INTO Place VALUES (23, 'Dolina Białego (wylot)', 1363);
+INSERT INTO Place VALUES (24, 'Dolina Chochołowska (wylot)', 949);
+INSERT INTO Place VALUES (25, 'Dolina Iwaniacka (wylot)', 1240);
+INSERT INTO Place VALUES (26, 'Dolina Jarząbcza (szlak papieski)', 821);
+INSERT INTO Place VALUES (27, 'Dolina Kościeliska (wylot)', 1829);
+INSERT INTO Place VALUES (28, 'Dolina Kościeliska - Jaskinia Raptawicka', 1162);
+INSERT INTO Place VALUES (29, 'Dolina Lejowa (wylot)', 909);
+INSERT INTO Place VALUES (30, 'Dolina Małej Łąki', 1328);
+INSERT INTO Place VALUES (31, 'Dolina Małej Łąki (wylot)', 543);
+INSERT INTO Place VALUES (32, 'Dolina Olczyska (wylot)', 1498);
+INSERT INTO Place VALUES (33, 'Dolina Strążyska (wylot)', 1337);
+INSERT INTO Place VALUES (34, 'Dolina Tomanowa (wylot)', 1154);
+INSERT INTO Place VALUES (35, 'Dolina ku Dziurze (wylot)', 1137);
+INSERT INTO Place VALUES (36, 'Dolina za Bramką', 337);
+INSERT INTO Place VALUES (37, 'Dolina za Bramką (wylot)', 176);
+INSERT INTO Place VALUES (38, 'Dolina za Mnichem', 2036);
+INSERT INTO Place VALUES (39, 'Dolinka pod Sedielkom', 1756);
+INSERT INTO Place VALUES (40, 'Dudowa Dolina (wylot)', 167);
+INSERT INTO Place VALUES (41, 'Gienkowe Mury', 1096);
+INSERT INTO Place VALUES (42, 'Giewont', 1794);
+INSERT INTO Place VALUES (43, 'Grześ', 2336);
+INSERT INTO Place VALUES (44, 'Gáborova dolina', 1118);
+INSERT INTO Place VALUES (45, 'Gładka Przełęcz', 671);
+INSERT INTO Place VALUES (46, 'Hala Gąsienicowa (1)', 204);
+INSERT INTO Place VALUES (47, 'Hala Hąsienicowa (szałas)', 2232);
+INSERT INTO Place VALUES (48, 'Hala na Stołach', 143);
+INSERT INTO Place VALUES (49, 'Hlinská dolina', 1945);
+INSERT INTO Place VALUES (50, 'Hotel Kalatówki', 2095);
+INSERT INTO Place VALUES (51, 'Iwaniacka Przełęcz', 729);
+INSERT INTO Place VALUES (52, 'Jamnicka dolina', 528);
+INSERT INTO Place VALUES (53, 'Jamnicka dolina (1)', 965);
+INSERT INTO Place VALUES (54, 'Jamnicke sedlo', 603);
+INSERT INTO Place VALUES (55, 'Jarząbczy Wierch', 1429);
+INSERT INTO Place VALUES (56, 'Jaskinia Dziura', 2145);
+INSERT INTO Place VALUES (57, 'Jaskinia Mroźna (wejście)', 816);
+INSERT INTO Place VALUES (58, 'Jaskinia Mroźna (wyjście)', 274);
+INSERT INTO Place VALUES (59, 'Jaskinia Mylna (wejście)', 215);
+INSERT INTO Place VALUES (60, 'Jaskinia Mylna (wyjście)', 996);
+INSERT INTO Place VALUES (61, 'Jaskinia Mylna (zejście)', 1974);
+INSERT INTO Place VALUES (62, 'Jaskinia Mylna - Jaskinia Raptawicka', 243);
+INSERT INTO Place VALUES (63, 'Jaskinia Raptawicka', 1876);
+INSERT INTO Place VALUES (64, 'Jedyniak', 1128);
+INSERT INTO Place VALUES (65, 'Karb', 2117);
+INSERT INTO Place VALUES (66, 'Kasprowy Wierch', 612);
+INSERT INTO Place VALUES (67, 'Klasztor Albertynek', 2406);
+INSERT INTO Place VALUES (68, 'Klasztor Albertynek (1)', 1942);
+INSERT INTO Place VALUES (69, 'Klasztor Albertynów', 186);
+INSERT INTO Place VALUES (70, 'Kondracka Przełęcz', 2060);
+INSERT INTO Place VALUES (71, 'Kondratowa Polana (Schr.)', 582);
+INSERT INTO Place VALUES (72, 'Kopa Kondracka', 1543);
+INSERT INTO Place VALUES (73, 'Kopské sedlo', 2192);
+INSERT INTO Place VALUES (74, 'Kozi Wierch', 499);
+INSERT INTO Place VALUES (75, 'Kozia Dolinka', 918);
+INSERT INTO Place VALUES (76, 'Kozia Przełęcz', 2340);
+INSERT INTO Place VALUES (77, 'Kończysty Wierch', 277);
+INSERT INTO Place VALUES (78, 'Kościelec', 1603);
+INSERT INTO Place VALUES (79, 'Krowi Żleb (wylot)', 2124);
+INSERT INTO Place VALUES (80, 'Kuźnice', 651);
+INSERT INTO Place VALUES (81, 'Kuźnice (2)', 1356);
+INSERT INTO Place VALUES (82, 'Kuźnice - Nosalowa Przełęcz', 208);
+INSERT INTO Place VALUES (83, 'Kôprovský štit', 1952);
+INSERT INTO Place VALUES (84, 'Las pod Wołoszynem', 2044);
+INSERT INTO Place VALUES (85, 'Malé Závraty', 1231);
+INSERT INTO Place VALUES (86, 'Małołączniak', 2140);
+INSERT INTO Place VALUES (87, 'Między Grzesiem, a Bobrowiecką Przełęczą', 762);
+INSERT INTO Place VALUES (88, 'Między Wołowcem, a Rakoniem', 1481);
+INSERT INTO Place VALUES (89, 'Mjęguszowiecka Przełęcz pod Chłopkiem', 213);
+INSERT INTO Place VALUES (90, 'Mokra Jama', 1610);
+INSERT INTO Place VALUES (91, 'Morskie Oko', 372);
+INSERT INTO Place VALUES (92, 'Morskie Oko (1)', 1533);
+INSERT INTO Place VALUES (93, 'Most przed schroniskiem', 1550);
+INSERT INTO Place VALUES (94, 'Murowaniec', 1356);
+INSERT INTO Place VALUES (95, 'Niskie Turnie', 566);
+INSERT INTO Place VALUES (96, 'Niżnia Kominiarska Polana', 1613);
+INSERT INTO Place VALUES (97, 'Nižná Lúka', 1890);
+INSERT INTO Place VALUES (98, 'Nosalowa Przełęcz', 1940);
+INSERT INTO Place VALUES (99, 'Olczyska Polana', 763);
+INSERT INTO Place VALUES (100, 'Oravice', 1574);
+INSERT INTO Place VALUES (101, 'Palenica Białczańska', 2075);
+INSERT INTO Place VALUES (102, 'Parking', 2030);
+INSERT INTO Place VALUES (103, 'Pańszczycki Potok (źródła)', 347);
+INSERT INTO Place VALUES (104, 'Plačlive', 724);
+INSERT INTO Place VALUES (105, 'Pod Muranom', 1816);
+INSERT INTO Place VALUES (106, 'Pod Rinštokm', 2132);
+INSERT INTO Place VALUES (107, 'Pod Skocznią', 1027);
+INSERT INTO Place VALUES (108, 'Pod Tomanovou', 1457);
+INSERT INTO Place VALUES (109, 'Podbanske', 2298);
+INSERT INTO Place VALUES (110, 'Polana Chochołowska', 196);
+INSERT INTO Place VALUES (111, 'Polana Chochołowska (2)', 265);
+INSERT INTO Place VALUES (112, 'Polana Chochołowska (3)', 639);
+INSERT INTO Place VALUES (113, 'Polana Iwanówka', 1292);
+INSERT INTO Place VALUES (114, 'Polana Kalatówki (2)', 2497);
+INSERT INTO Place VALUES (115, 'Polana Kalatówki - Dolina Białego', 1055);
+INSERT INTO Place VALUES (116, 'Polana Kopieniec', 998);
+INSERT INTO Place VALUES (117, 'Polana Kopieniec (2)', 1159);
+INSERT INTO Place VALUES (118, 'Polana Pisana', 1479);
+INSERT INTO Place VALUES (119, 'Polana Strążyska (1)', 175);
+INSERT INTO Place VALUES (120, 'Polana Strążyska (2)', 869);
+INSERT INTO Place VALUES (121, 'Polana pod Wołoszynem', 242);
+INSERT INTO Place VALUES (122, 'Potok Jarząbczy', 2492);
+INSERT INTO Place VALUES (123, 'Poľský hrebeň', 1775);
+INSERT INTO Place VALUES (124, 'Pred Tichou', 772);
+INSERT INTO Place VALUES (125, 'Przełęcz Krzyżne', 1135);
+INSERT INTO Place VALUES (126, 'Przełęcz Liliowe', 2423);
+INSERT INTO Place VALUES (127, 'Przełęcz Między Kopami', 724);
+INSERT INTO Place VALUES (128, 'Przełęcz pod Kopą Kondracką', 892);
+INSERT INTO Place VALUES (129, 'Przełęcz w Grzybowcu', 454);
+INSERT INTO Place VALUES (130, 'Przysłop Miętusi', 448);
+INSERT INTO Place VALUES (131, 'Psia Trawka', 1170);
+INSERT INTO Place VALUES (132, 'Pyszniańska Przełęcz', 740);
+INSERT INTO Place VALUES (133, 'Raczkowa Przełęcz', 1665);
+INSERT INTO Place VALUES (134, 'Rakoń', 1639);
+INSERT INTO Place VALUES (135, 'Račkova dolina', 1836);
+INSERT INTO Place VALUES (136, 'Rohačske plesa', 1967);
+INSERT INTO Place VALUES (137, 'Rozejście szlaków pod Giewontem', 2448);
+INSERT INTO Place VALUES (138, 'Rusinowa Polana', 596);
+INSERT INTO Place VALUES (139, 'Rysy', 399);
+INSERT INTO Place VALUES (140, 'Rzeżuchy', 2341);
+INSERT INTO Place VALUES (141, 'Ráztoky', 2047);
+INSERT INTO Place VALUES (142, 'Rówień Waksmundzka', 1656);
+INSERT INTO Place VALUES (143, 'Rówień Waksmundzka (1)', 2047);
+INSERT INTO Place VALUES (144, 'Sarnia Skała', 796);
+INSERT INTO Place VALUES (145, 'Schr. w Pięciu Stawach', 1390);
+INSERT INTO Place VALUES (146, 'Schronisko Morskie Oko', 734);
+INSERT INTO Place VALUES (147, 'Schronisko Ornak', 2065);
+INSERT INTO Place VALUES (148, 'Schronisko na Pol. Chochołowskiej', 1111);
+INSERT INTO Place VALUES (149, 'Sedlo Sedielko', 1098);
+INSERT INTO Place VALUES (150, 'Sesterské pleso', 1399);
+INSERT INTO Place VALUES (151, 'Siklawica', 398);
+INSERT INTO Place VALUES (152, 'Siwa Przełęcz', 383);
+INSERT INTO Place VALUES (153, 'Skrajny Granat', 142);
+INSERT INTO Place VALUES (154, 'Skrzyżowanie szlaków (Toporowa Cyrchla)', 1153);
+INSERT INTO Place VALUES (155, 'Smocza Jama (wejście)', 156);
+INSERT INTO Place VALUES (156, 'Smocza Jama (wyjście)', 1288);
+INSERT INTO Place VALUES (157, 'Smreczyński Staw', 878);
+INSERT INTO Place VALUES (158, 'Smutna dolina', 2174);
+INSERT INTO Place VALUES (159, 'Smutne sedlo', 635);
+INSERT INTO Place VALUES (160, 'Stacja Badawcza IMGW', 466);
+INSERT INTO Place VALUES (161, 'Stacja Kolei Linowej', 1641);
+INSERT INTO Place VALUES (162, 'Staników Żleb (wylot)', 2364);
+INSERT INTO Place VALUES (163, 'Stara Koleba', 1256);
+INSERT INTO Place VALUES (164, 'Stara Roztoka', 1720);
+INSERT INTO Place VALUES (165, 'Stare Kościeliska', 2129);
+INSERT INTO Place VALUES (166, 'Starolesnianska polana', 1988);
+INSERT INTO Place VALUES (167, 'Starorobociańska Przełecz', 661);
+INSERT INTO Place VALUES (168, 'Starorobociański Wierch', 1570);
+INSERT INTO Place VALUES (169, 'Strażniczówka', 449);
+INSERT INTO Place VALUES (170, 'Sucha Przełęcz', 2017);
+INSERT INTO Place VALUES (171, 'Sucha Przełęcz - Kasprowy Wierch', 1343);
+INSERT INTO Place VALUES (172, 'Szałasiska', 501);
+INSERT INTO Place VALUES (173, 'Szpiglasowa Przełęcz', 1105);
+INSERT INTO Place VALUES (174, 'Szpiglasowy Wierch', 323);
+INSERT INTO Place VALUES (175, 'Tatliakova chata', 383);
+INSERT INTO Place VALUES (176, 'Tatranska Javorina', 1929);
+INSERT INTO Place VALUES (177, 'Temnosmrečinska dolina', 2083);
+INSERT INTO Place VALUES (178, 'Temnosmrečinske pleso', 856);
+INSERT INTO Place VALUES (179, 'Tomanowa Polana', 2159);
+INSERT INTO Place VALUES (180, 'Toporowa Cyrchla', 265);
+INSERT INTO Place VALUES (181, 'Triesňavy', 609);
+INSERT INTO Place VALUES (182, 'Trzydniowiański Wierch', 776);
+INSERT INTO Place VALUES (183, 'Turbina Wodna (Hala Gąsienicowa)', 683);
+INSERT INTO Place VALUES (184, 'Upłaz (Czerwony Staw)', 2295);
+INSERT INTO Place VALUES (185, 'Vanička', 620);
+INSERT INTO Place VALUES (186, 'Velické pleso', 1287);
+INSERT INTO Place VALUES (187, 'Vyšné Kôprovské sedlo', 1382);
+INSERT INTO Place VALUES (188, 'Východná Vysoká', 787);
+INSERT INTO Place VALUES (189, 'Wielka Krokiew', 2428);
+INSERT INTO Place VALUES (190, 'Wielka Polana w Dol. Małej Łąki', 1897);
+INSERT INTO Place VALUES (191, 'Wielki Staw', 141);
+INSERT INTO Place VALUES (192, 'Wielki Staw (1)', 2386);
+INSERT INTO Place VALUES (193, 'Wielki Staw (2)', 2080);
+INSERT INTO Place VALUES (194, 'Wierch Poroniec', 340);
+INSERT INTO Place VALUES (195, 'Wodogrzmoty Mickiewicza', 1518);
+INSERT INTO Place VALUES (196, 'Wolaczyska', 1887);
+INSERT INTO Place VALUES (197, 'Wołowiec', 1685);
+INSERT INTO Place VALUES (198, 'Wrota Chałubińskiego', 1354);
+INSERT INTO Place VALUES (199, 'Wyżnia Kira Miętusia', 720);
+INSERT INTO Place VALUES (200, 'Wyżnia Kondracka Przełęcz', 520);
+INSERT INTO Place VALUES (201, 'Wąwóz Kraków', 1876);
+INSERT INTO Place VALUES (202, 'Zadni Granat', 1354);
+INSERT INTO Place VALUES (203, 'Zahradziska', 920);
+INSERT INTO Place VALUES (204, 'Zajazd Józef', 665);
+INSERT INTO Place VALUES (205, 'Zamrznuté pleso', 1927);
+INSERT INTO Place VALUES (206, 'Zawrat', 2195);
+INSERT INTO Place VALUES (207, 'Zazadnia', 2294);
+INSERT INTO Place VALUES (208, 'Zmarzły Staw', 1533);
+INSERT INTO Place VALUES (209, 'Zmarzły Staw (1)', 2435);
+INSERT INTO Place VALUES (210, 'Zverovka (1)', 968);
+INSERT INTO Place VALUES (211, 'Zverovka (3)', 472);
+INSERT INTO Place VALUES (212, 'horska chata Oresnica', 282);
+INSERT INTO Place VALUES (213, 'sedlo Prielom', 2279);
+INSERT INTO Place VALUES (214, 'sedlo Umrla', 1343);
+INSERT INTO Place VALUES (215, 'sedlo Zábrat', 1971);
+INSERT INTO Place VALUES (216, 'sedlo Závory', 1375);
+INSERT INTO Place VALUES (217, 'Černa zem', 406);
+INSERT INTO Place VALUES (218, 'Łysa Polana', 1684);
+INSERT INTO Place VALUES (219, 'Świnica', 1238);
+INSERT INTO Place VALUES (220, 'Świnica (1)', 321);
+INSERT INTO Place VALUES (221, 'Świnicka Przełęcz', 1764);
+INSERT INTO Place VALUES (222, 'Šurkavka', 1260);
+INSERT INTO Place VALUES (223, 'Żabie Oko', 1441);
+INSERT INTO Place VALUES (224, 'Żleb Kulczyńskiego', 1350);
+INSERT INTO Place VALUES (225, 'Żleb pod Wysranki', 2106);
+INSERT INTO Place VALUES (226, 'Žabia dolina', 483);
+INSERT INTO Place VALUES (227, 'Žiarske sedlo', 1022);
+
+INSERT INTO Edge VALUES(1, 181, 214, 45, 45, 1690, 'czerwony');
+INSERT INTO Edge VALUES(2, 185, 181, 15, 15, 1140, 'żółty');
+INSERT INTO Edge VALUES(3, 21, 58, 15, 0, 270, 'czarny');
+INSERT INTO Edge VALUES(4, 99, 32, 45, 35, 2010, 'zielony');
+INSERT INTO Edge VALUES(5, 121, 143, 50, 60, 1930, 'czerwony');
+INSERT INTO Edge VALUES(6, 18, 120, 45, 35, 940, 'czarny');
+INSERT INTO Edge VALUES(7, 56, 35, 20, 15, 860, 'niebieski');
+INSERT INTO Edge VALUES(8, 164, 195, 10, 10, 770, 'zielony');
+INSERT INTO Edge VALUES(9, 35, 33, 10, 10, 380, 'czarny');
+INSERT INTO Edge VALUES(10, 23, 35, 20, 20, 1030, 'czarny');
+INSERT INTO Edge VALUES(11, 154, 180, 20, 15, 1250, 'czerwony/zielony');
+INSERT INTO Edge VALUES(12, 154, 131, 35, 100, 1360, 'czerwony');
+INSERT INTO Edge VALUES(13, 189, 23, 10, 10, 520, 'czarny');
+INSERT INTO Edge VALUES(14, 112, 111, 10, 10, 640, 'czarny');
+INSERT INTO Edge VALUES(15, 59, 62, 20, 15, 110, 'czerwony');
+INSERT INTO Edge VALUES(16, 155, 201, 25, 0, 480, 'żółty');
+INSERT INTO Edge VALUES(17, 162, 31, 30, 30, 2110, 'czarny');
+INSERT INTO Edge VALUES(18, 27, 162, 15, 15, 1000, 'czarny');
+INSERT INTO Edge VALUES(19, 220, 221, 60, 45, 620, 'czerwony');
+INSERT INTO Edge VALUES(20, 72, 128, 20, 15, 560, 'czerwony');
+INSERT INTO Edge VALUES(21, 86, 72, 35, 35, 1070, 'czerwony');
+INSERT INTO Edge VALUES(22, 14, 86, 35, 35, 1420, 'czerwony');
+INSERT INTO Edge VALUES(23, 13, 14, 30, 40, 1040, 'czerwony/zielony');
+INSERT INTO Edge VALUES(24, 70, 72, 35, 50, 1220, 'żółty');
+INSERT INTO Edge VALUES(25, 200, 70, 15, 10, 380, 'niebieski');
+INSERT INTO Edge VALUES(26, 137, 42, 15, 0, 120, 'niebieski');
+INSERT INTO Edge VALUES(27, 71, 70, 50, 85, 1740, 'niebieski');
+INSERT INTO Edge VALUES(28, 190, 70, 90, 110, 3110, 'żółty');
+INSERT INTO Edge VALUES(29, 76, 206, 70, 70, 820, 'czerwony');
+INSERT INTO Edge VALUES(30, 202, 224, 25, 25, 440, 'czerwony');
+INSERT INTO Edge VALUES(31, 224, 74, 50, 50, 520, 'czerwony');
+INSERT INTO Edge VALUES(32, 75, 224, 50, 50, 550, 'czarny');
+INSERT INTO Edge VALUES(33, 82, 127, 75, 105, 2700, 'niebieski');
+INSERT INTO Edge VALUES(34, 98, 82, 15, 10, 560, 'zielony');
+INSERT INTO Edge VALUES(35, 81, 82, 10, 15, 430, 'zielony/niebieski');
+INSERT INTO Edge VALUES(36, 192, 191, 10, 10, 420, 'niebieski');
+INSERT INTO Edge VALUES(37, 193, 192, 3, 3, 230, 'niebieski');
+INSERT INTO Edge VALUES(38, 195, 140, 70, 90, 3740, 'zielony');
+INSERT INTO Edge VALUES(39, 145, 193, 5, 5, 560, 'niebieski');
+INSERT INTO Edge VALUES(40, 223, 145, 100, 120, 3700, 'niebieski');
+INSERT INTO Edge VALUES(41, 174, 173, 10, 10, 260, 'żółty');
+INSERT INTO Edge VALUES(42, 38, 173, 40, 60, 1810, 'żółty');
+INSERT INTO Edge VALUES(43, 92, 91, 20, 20, 1180, 'czerwony');
+INSERT INTO Edge VALUES(44, 91, 92, 20, 20, 1300, 'czerwony');
+INSERT INTO Edge VALUES(45, 170, 171, 5, 5, 170, 'czerwony');
+INSERT INTO Edge VALUES(46, 162, 130, 70, 75, 2260, 'czerwony');
+INSERT INTO Edge VALUES(47, 190, 130, 15, 15, 890, 'czarny');
+INSERT INTO Edge VALUES(48, 120, 151, 10, 10, 300, 'żółty');
+INSERT INTO Edge VALUES(49, 119, 120, 3, 3, 130, 'czarny');
+INSERT INTO Edge VALUES(50, 18, 144, 10, 15, 230, 'czarny');
+INSERT INTO Edge VALUES(51, 80, 67, 15, 20, 570, 'niebieski');
+INSERT INTO Edge VALUES(52, 67, 69, 30, 45, 700, 'żółty');
+INSERT INTO Edge VALUES(53, 127, 81, 105, 75, 3060, 'żółty');
+INSERT INTO Edge VALUES(54, 46, 131, 90, 60, 4070, 'czarny');
+INSERT INTO Edge VALUES(55, 143, 142, 5, 5, 110, 'czerwony/zielony');
+INSERT INTO Edge VALUES(56, 84, 121, 30, 45, 1250, 'czerwony');
+INSERT INTO Edge VALUES(57, 19, 121, 20, 20, 1660, 'czarny');
+INSERT INTO Edge VALUES(58, 138, 207, 75, 55, 2710, 'niebieski');
+INSERT INTO Edge VALUES(59, 116, 99, 45, 30, 1400, 'zielony');
+INSERT INTO Edge VALUES(60, 117, 116, 25, 25, 750, 'zielony');
+INSERT INTO Edge VALUES(61, 154, 117, 10, 15, 520, 'zielony');
+INSERT INTO Edge VALUES(63, 34, 179, 60, 90, 2960, 'zielony');
+INSERT INTO Edge VALUES(64, 157, 34, 30, 20, 1090, 'czarny');
+INSERT INTO Edge VALUES(65, 156, 118, 0, 25, 640, 'żółty');
+INSERT INTO Edge VALUES(66, 57, 225, 25, 0, 710, 'czarny');
+INSERT INTO Edge VALUES(67, 48, 5, 70, 55, 1850, 'niebieski');
+INSERT INTO Edge VALUES(68, 51, 152, 135, 120, 3420, 'zielony');
+INSERT INTO Edge VALUES(69, 133, 152, 20, 15, 470, 'zielony');
+INSERT INTO Edge VALUES(70, 113, 25, 10, 10, 590, 'żółty/czarny');
+INSERT INTO Edge VALUES(71, 93, 148, 3, 3, 60, 'zielony');
+INSERT INTO Edge VALUES(72, 222, 3, 90, 100, 3840, 'niebieski');
+INSERT INTO Edge VALUES(73, 222, 214, 10, 10, 480, 'czerwony');
+INSERT INTO Edge VALUES(74, 7, 181, 45, 45, 2740, 'czerwony');
+INSERT INTO Edge VALUES(75, 100, 7, 5, 5, 510, 'czerwony/niebieski/żółty');
+INSERT INTO Edge VALUES(76, 185, 222, 15, 15, 870, 'niebieski');
+INSERT INTO Edge VALUES(77, 100, 185, 40, 40, 2660, 'niebieski');
+INSERT INTO Edge VALUES(78, 141, 43, 60, 60, 1420, 'zielony');
+INSERT INTO Edge VALUES(79, 210, 141, 75, 75, 3880, 'żółty');
+INSERT INTO Edge VALUES(80, 215, 141, 45, 45, 1680, 'żółty');
+INSERT INTO Edge VALUES(81, 134, 215, 30, 30, 880, 'żółty');
+INSERT INTO Edge VALUES(82, 175, 215, 30, 45, 1330, 'zielony');
+INSERT INTO Edge VALUES(83, 158, 175, 45, 45, 1210, 'zielony/niebieski');
+INSERT INTO Edge VALUES(84, 136, 158, 30, 30, 1790, 'zielony');
+INSERT INTO Edge VALUES(85, 33, 37, 20, 20, 1380, 'czarny');
+INSERT INTO Edge VALUES(86, 31, 30, 25, 25, 1280, 'niebieski/żółty');
+INSERT INTO Edge VALUES(87, 225, 165, 5, 5, 500, 'zielony');
+INSERT INTO Edge VALUES(88, 165, 199, 10, 10, 420, 'zielony');
+INSERT INTO Edge VALUES(89, 199, 27, 15, 15, 1280, 'zielony');
+INSERT INTO Edge VALUES(90, 118, 21, 15, 15, 750, 'zielony');
+INSERT INTO Edge VALUES(91, 34, 28, 25, 20, 1220, 'zielony');
+INSERT INTO Edge VALUES(92, 147, 34, 5, 8, 150, 'żółty');
+INSERT INTO Edge VALUES(93, 63, 62, 15, 0, 60, 'czarny');
+INSERT INTO Edge VALUES(94, 62, 28, 25, 20, 90, 'czarny/czerwony');
+INSERT INTO Edge VALUES(95, 29, 24, 25, 25, 1500, 'zielony');
+INSERT INTO Edge VALUES(96, 197, 95, 120, 120, 2440, 'czerwony');
+INSERT INTO Edge VALUES(97, 55, 77, 45, 45, 1270, 'czerwony');
+INSERT INTO Edge VALUES(98, 182, 77, 50, 35, 1560, 'zielony');
+INSERT INTO Edge VALUES(99, 114, 71, 120, 120, 1570, 'niebieski');
+INSERT INTO Edge VALUES(100, 184, 183, 60, 50, 1940, 'żółty');
+INSERT INTO Edge VALUES(101, 6, 131, 35, 45, 1690, 'czarny');
+INSERT INTO Edge VALUES(102, 227, 2, 180, 180, 2610, 'żółty');
+INSERT INTO Edge VALUES(103, 197, 54, 45, 30, 550, 'czerwony/niebieski');
+INSERT INTO Edge VALUES(104, 52, 54, 90, 75, 2480, 'niebieski');
+INSERT INTO Edge VALUES(105, 95, 52, 60, 45, 1140, 'zielony');
+INSERT INTO Edge VALUES(106, 167, 135, 105, 45, 2500, 'żółty');
+INSERT INTO Edge VALUES(107, 132, 109, 285, 180, 8220, 'niebieski');
+INSERT INTO Edge VALUES(108, 12, 132, 60, 60, 1220, 'czerwony');
+INSERT INTO Edge VALUES(109, 108, 124, 165, 150, 7910, 'żółty');
+INSERT INTO Edge VALUES(110, 216, 177, 80, 60, 1810, 'zielony');
+INSERT INTO Edge VALUES(111, 217, 216, 90, 120, 4790, 'czerwony');
+INSERT INTO Edge VALUES(112, 108, 217, 30, 45, 2040, 'żółty');
+INSERT INTO Edge VALUES(113, 187, 83, 30, 30, 780, 'czerwony');
+INSERT INTO Edge VALUES(114, 49, 106, 90, 90, 5680, 'niebieski');
+INSERT INTO Edge VALUES(115, 177, 49, 15, 15, 750, 'zielony');
+INSERT INTO Edge VALUES(116, 49, 187, 135, 120, 4850, 'niebieski');
+INSERT INTO Edge VALUES(117, 226, 187, 45, 60, 2980, 'niebieski');
+INSERT INTO Edge VALUES(118, 166, 150, 115, 150, 4930, 'niebieski');
+INSERT INTO Edge VALUES(119, 176, 105, 30, 30, 2130, 'zielony/niebieski');
+INSERT INTO Edge VALUES(120, 123, 205, 20, 20, 470, 'zielony');
+INSERT INTO Edge VALUES(121, 188, 123, 30, 30, 430, 'żółty');
+INSERT INTO Edge VALUES(122, 186, 123, 90, 120, 2740, 'zielony');
+INSERT INTO Edge VALUES(123, 73, 105, 150, 120, 6360, 'niebieski');
+INSERT INTO Edge VALUES(124, 195, 223, 90, 105, 4580, 'czerwony');
+INSERT INTO Edge VALUES(125, 122, 26, 2, 2, 60, 'żółty');
+INSERT INTO Edge VALUES(126, 26, 112, 50, 40, 2070, 'czerwony/żółty');
+INSERT INTO Edge VALUES(127, 45, 216, 15, 15, 550, 'czerwony');
+INSERT INTO Edge VALUES(128, 107, 169, 10, 10, 560, 'czarny');
+INSERT INTO Edge VALUES(129, 38, 198, 45, 60, 1220, 'czerwony');
+INSERT INTO Edge VALUES(130, 146, 38, 70, 90, 2290, 'żółty');
+INSERT INTO Edge VALUES(131, 92, 17, 20, 30, 550, 'czerwony');
+INSERT INTO Edge VALUES(132, 178, 177, 45, 30, 1380, 'czerwony');
+INSERT INTO Edge VALUES(133, 203, 199, 3, 3, 210, 'czarny');
+INSERT INTO Edge VALUES(134, 130, 203, 40, 25, 1800, 'czarny');
+INSERT INTO Edge VALUES(135, 5, 225, 2, 2, 70, 'zielony');
+INSERT INTO Edge VALUES(136, 21, 5, 10, 10, 850, 'zielony');
+INSERT INTO Edge VALUES(137, 201, 118, 5, 5, 130, 'zielony');
+INSERT INTO Edge VALUES(138, 167, 168, 40, 60, 1130, 'czerwony');
+INSERT INTO Edge VALUES(139, 77, 167, 2, 2, 90, 'czerwony');
+INSERT INTO Edge VALUES(140, 175, 1, 30, 30, 1780, 'czerwony');
+INSERT INTO Edge VALUES(141, 104, 159, 45, 30, 1150, 'czerwony');
+INSERT INTO Edge VALUES(142, 53, 52, 15, 15, 620, 'zielony/niebieski');
+INSERT INTO Edge VALUES(143, 95, 55, 15, 30, 430, 'czerwony');
+INSERT INTO Edge VALUES(144, 212, 2, 180, 240, 6300, 'zielony');
+INSERT INTO Edge VALUES(145, 42, 137, 15, 0, 150, 'niebieski');
+INSERT INTO Edge VALUES(146, 137, 200, 10, 10, 130, 'niebieski');
+INSERT INTO Edge VALUES(147, 24, 40, 50, 50, 3300, 'zielony');
+INSERT INTO Edge VALUES(148, 40, 25, 15, 20, 950, 'zielony');
+INSERT INTO Edge VALUES(149, 25, 79, 10, 10, 610, 'zielony');
+INSERT INTO Edge VALUES(150, 9, 133, 15, 15, 1030, 'czerwony');
+INSERT INTO Edge VALUES(151, 12, 9, 25, 20, 430, 'czerwony');
+INSERT INTO Edge VALUES(152, 11, 10, 150, 240, 7070, 'żółty');
+INSERT INTO Edge VALUES(153, 10, 9, 25, 20, 760, 'niebieski');
+INSERT INTO Edge VALUES(154, 88, 197, 25, 25, 560, 'niebieski');
+INSERT INTO Edge VALUES(155, 87, 43, 10, 20, 560, 'żółty');
+INSERT INTO Edge VALUES(156, 111, 93, 1, 1, 50, 'zielony');
+INSERT INTO Edge VALUES(157, 110, 93, 1, 1, 90, 'zielony');
+INSERT INTO Edge VALUES(158, 79, 112, 20, 25, 990, 'zielony');
+INSERT INTO Edge VALUES(159, 61, 60, 0, 20, 270, 'czerwony');
+INSERT INTO Edge VALUES(160, 28, 61, 5, 5, 130, 'zielony');
+INSERT INTO Edge VALUES(161, 61, 201, 1, 1, 30, 'zielony');
+INSERT INTO Edge VALUES(162, 66, 171, 5, 5, 160, 'czerwony');
+INSERT INTO Edge VALUES(163, 66, 161, 3, 3, 100, 'zielony');
+INSERT INTO Edge VALUES(164, 50, 115, 3, 3, 190, 'niebieski');
+INSERT INTO Edge VALUES(165, 68, 114, 20, 20, 990, 'niebieski');
+INSERT INTO Edge VALUES(166, 67, 68, 2, 2, 90, 'niebieski');
+INSERT INTO Edge VALUES(167, 115, 68, 15, 15, 570, 'niebieski');
+INSERT INTO Edge VALUES(168, 183, 46, 10, 10, 430, 'zielony/żółty');
+INSERT INTO Edge VALUES(169, 46, 94, 1, 1, 90, 'zielony/żółty');
+INSERT INTO Edge VALUES(170, 127, 47, 25, 25, 1250, 'niebieski');
+INSERT INTO Edge VALUES(171, 47, 160, 1, 1, 90, 'niebieski');
+INSERT INTO Edge VALUES(172, 64, 172, 20, 20, 620, 'żółty/czarny');
+INSERT INTO Edge VALUES(173, 219, 220, 5, 5, 30, 'czerwony');
+INSERT INTO Edge VALUES(174, 220, 206, 50, 50, 570, 'czerwony');
+INSERT INTO Edge VALUES(175, 15, 16, 15, 15, 790, 'niebieski');
+INSERT INTO Edge VALUES(176, 84, 195, 5, 5, 630, 'czerwony');
+INSERT INTO Edge VALUES(177, 101, 19, 25, 30, 1710, 'niebieski');
+INSERT INTO Edge VALUES(178, 146, 91, 3, 3, 80, 'czerwony/niebieski');
+INSERT INTO Edge VALUES(179, 223, 146, 1, 1, 250, 'czerwony/niebieski');
+INSERT INTO Edge VALUES(180, 101, 84, 30, 30, 2190, 'czerwony');
+INSERT INTO Edge VALUES(181, 102, 101, 1, 1, 50, 'czerwony');
+INSERT INTO Edge VALUES(182, 44, 135, 45, 30, 1240, 'zielony');
+INSERT INTO Edge VALUES(183, 133, 44, 45, 30, 1250, 'zielony');
+INSERT INTO Edge VALUES(184, 44, 9, 30, 45, 1100, 'niebieski');
+INSERT INTO Edge VALUES(185, 213, 205, 30, 30, 370, 'niebieski');
+INSERT INTO Edge VALUES(186, 150, 213, 60, 75, 1820, 'niebieski');
+INSERT INTO Edge VALUES(187, 205, 218, 300, 220, 13060, 'niebieski');
+INSERT INTO Edge VALUES(188, 39, 150, 0, 180, 3520, 'żółty');
+INSERT INTO Edge VALUES(189, 105, 149, 225, 270, 9150, 'zielony');
+INSERT INTO Edge VALUES(190, 204, 29, 35, 35, 700, 'zielony');
+INSERT INTO Edge VALUES(191, 96, 29, 70, 50, 3330, 'żółty');
+INSERT INTO Edge VALUES(192, 30, 190, 15, 20, 820, 'żółty');
+INSERT INTO Edge VALUES(193, 30, 130, 20, 25, 820, 'niebieski');
+INSERT INTO Edge VALUES(194, 37, 31, 17, 17, 1160, 'czarny');
+INSERT INTO Edge VALUES(195, 37, 36, 20, 25, 930, 'zielony');
+INSERT INTO Edge VALUES(196, 94, 47, 3, 3, 230, 'niebieski');
+INSERT INTO Edge VALUES(197, 134, 88, 15, 15, 500, 'niebieski');
+INSERT INTO Edge VALUES(198, 43, 134, 60, 75, 2630, 'niebieski');
+INSERT INTO Edge VALUES(199, 160, 90, 2, 2, 130, 'niebieski');
+INSERT INTO Edge VALUES(200, 94, 90, 2, 2, 130, 'zielony/żółty');
+INSERT INTO Edge VALUES(201, 90, 15, 20, 25, 1460, 'niebieski');
+INSERT INTO Edge VALUES(202, 54, 104, 105, 105, 1330, 'czerwony');
+INSERT INTO Edge VALUES(203, 112, 110, 3, 3, 320, 'zielony');
+INSERT INTO Edge VALUES(204, 19, 138, 10, 10, 570, 'niebieski');
+INSERT INTO Edge VALUES(205, 159, 158, 75, 45, 1990, 'niebieski');
+INSERT INTO Edge VALUES(206, 170, 161, 3, 3, 180, 'żółty');
+INSERT INTO Edge VALUES(207, 103, 183, 60, 50, 2420, 'zielony');
+INSERT INTO Edge VALUES(208, 142, 103, 45, 55, 2540, 'zielony');
+INSERT INTO Edge VALUES(209, 208, 16, 30, 20, 900, 'niebieski');
+INSERT INTO Edge VALUES(210, 209, 75, 10, 10, 300, 'zielony');
+INSERT INTO Edge VALUES(211, 211, 43, 120, 120, 7580, 'zielony');
+INSERT INTO Edge VALUES(212, 104, 227, 30, 30, 530, 'żółty');
+INSERT INTO Edge VALUES(213, 53, 227, 105, 90, 2500, 'zielony');
+INSERT INTO Edge VALUES(214, 85, 227, 30, 30, 1120, 'zielony');
+INSERT INTO Edge VALUES(215, 168, 133, 45, 30, 830, 'czerwony');
+INSERT INTO Edge VALUES(216, 135, 97, 165, 120, 4990, 'żółty');
+INSERT INTO Edge VALUES(217, 97, 53, 105, 135, 5200, 'niebieski');
+INSERT INTO Edge VALUES(218, 97, 55, 180, 215, 6410, 'zielony');
+INSERT INTO Edge VALUES(219, 125, 153, 105, 105, 1330, 'czerwony');
+INSERT INTO Edge VALUES(220, 153, 202, 25, 25, 350, 'czerwony');
+INSERT INTO Edge VALUES(221, 226, 139, 105, 165, 4320, 'czerwony');
+INSERT INTO Edge VALUES(222, 4, 87, 20, 35, 2110, 'żółty');
+INSERT INTO Edge VALUES(223, 111, 4, 20, 35, 2110, 'żółty');
+INSERT INTO Edge VALUES(224, 4, 3, 10, 15, 250, 'niebieski');
+INSERT INTO Edge VALUES(225, 171, 128, 100, 80, 3300, 'czerwony');
+INSERT INTO Edge VALUES(226, 80, 66, 105, 135, 6150, 'zielony');
+INSERT INTO Edge VALUES(227, 126, 170, 25, 25, 1000, 'czerwony');
+INSERT INTO Edge VALUES(228, 41, 126, 50, 70, 1090, 'zielony');
+INSERT INTO Edge VALUES(229, 170, 41, 60, 30, 970, 'żółty');
+INSERT INTO Edge VALUES(230, 172, 41, 10, 15, 390, 'zielony/żółty');
+INSERT INTO Edge VALUES(231, 160, 64, 5, 5, 440, 'czarny');
+INSERT INTO Edge VALUES(232, 90, 64, 4, 4, 340, 'żółty');
+INSERT INTO Edge VALUES(233, 170, 217, 120, 90, 4100, 'żółty');
+INSERT INTO Edge VALUES(234, 172, 20, 20, 25, 1280, 'czarny');
+INSERT INTO Edge VALUES(235, 194, 138, 50, 60, 3170, 'zielony');
+INSERT INTO Edge VALUES(236, 138, 143, 50, 60, 2090, 'zielony');
+INSERT INTO Edge VALUES(237, 142, 131, 60, 50, 3280, 'czerwony');
+INSERT INTO Edge VALUES(238, 130, 86, 135, 180, 4200, 'niebieski');
+INSERT INTO Edge VALUES(239, 40, 96, 75, 85, 3590, 'czarny');
+INSERT INTO Edge VALUES(240, 165, 96, 35, 45, 1630, 'czarny');
+INSERT INTO Edge VALUES(241, 79, 182, 105, 135, 2660, 'czerwony');
+INSERT INTO Edge VALUES(242, 182, 26, 100, 70, 2660, 'czerwony');
+INSERT INTO Edge VALUES(243, 110, 88, 105, 150, 4140, 'zielony');
+INSERT INTO Edge VALUES(244, 113, 152, 110, 155, 4450, 'czarny');
+INSERT INTO Edge VALUES(245, 51, 113, 70, 50, 2040, 'żółty');
+INSERT INTO Edge VALUES(246, 51, 147, 75, 60, 2140, 'żółty');
+INSERT INTO Edge VALUES(247, 179, 13, 95, 120, 2440, 'zielony');
+INSERT INTO Edge VALUES(248, 203, 13, 150, 200, 3730, 'czerwony');
+INSERT INTO Edge VALUES(249, 129, 190, 30, 20, 1040, 'czarny');
+INSERT INTO Edge VALUES(250, 129, 200, 60, 75, 2110, 'czerwony');
+INSERT INTO Edge VALUES(251, 129, 119, 70, 35, 1360, 'czarny/czerwony');
+INSERT INTO Edge VALUES(252, 22, 18, 20, 25, 460, 'czarny');
+INSERT INTO Edge VALUES(253, 23, 22, 55, 75, 2590, 'żółty');
+INSERT INTO Edge VALUES(254, 33, 119, 35, 40, 1930, 'czerwony');
+INSERT INTO Edge VALUES(255, 22, 115, 80, 80, 2510, 'czarny');
+INSERT INTO Edge VALUES(256, 114, 50, 10, 10, 420, 'niebieski');
+INSERT INTO Edge VALUES(257, 71, 128, 60, 80, 2250, 'zielony');
+INSERT INTO Edge VALUES(258, 98, 8, 50, 40, 1310, 'zielony');
+INSERT INTO Edge VALUES(259, 99, 98, 25, 30, 1400, 'żółty');
+INSERT INTO Edge VALUES(260, 20, 221, 45, 60, 1030, 'czarny');
+INSERT INTO Edge VALUES(261, 221, 126, 30, 25, 1000, 'czerwony');
+INSERT INTO Edge VALUES(262, 196, 206, 60, 75, 1790, 'niebieski');
+INSERT INTO Edge VALUES(264, 196, 76, 60, 80, 1230, 'żółty');
+INSERT INTO Edge VALUES(265, 163, 196, 5, 5, 250, 'niebieski');
+INSERT INTO Edge VALUES(266, 191, 163, 5, 5, 410, 'niebieski');
+INSERT INTO Edge VALUES(267, 74, 191, 105, 75, 1100, 'czarny');
+INSERT INTO Edge VALUES(268, 125, 192, 120, 90, 2430, 'żółty');
+INSERT INTO Edge VALUES(269, 140, 193, 35, 45, 1110, 'zielony');
+INSERT INTO Edge VALUES(270, 145, 140, 40, 30, 880, 'czarny');
+INSERT INTO Edge VALUES(271, 184, 125, 75, 105, 2840, 'żółty');
+INSERT INTO Edge VALUES(272, 103, 184, 20, 25, 740, 'czarny');
+INSERT INTO Edge VALUES(273, 20, 65, 20, 30, 810, 'niebieski');
+INSERT INTO Edge VALUES(274, 78, 65, 45, 35, 720, 'czarny');
+INSERT INTO Edge VALUES(275, 65, 15, 35, 25, 850, 'czarny');
+INSERT INTO Edge VALUES(276, 153, 16, 95, 70, 1210, 'żółty');
+INSERT INTO Edge VALUES(277, 208, 206, 60, 60, 860, 'niebieski');
+INSERT INTO Edge VALUES(278, 209, 208, 15, 10, 290, 'żółty');
+INSERT INTO Edge VALUES(279, 76, 209, 60, 60, 580, 'żółty');
+INSERT INTO Edge VALUES(280, 74, 76, 80, 80, 740, 'czerwony');
+INSERT INTO Edge VALUES(281, 202, 75, 50, 40, 660, 'zielony');
+INSERT INTO Edge VALUES(283, 89, 17, 165, 120, 1740, 'zielony');
+INSERT INTO Edge VALUES(284, 139, 17, 200, 120, 2890, 'czerwony');
+INSERT INTO Edge VALUES(286, 173, 163, 90, 70, 2220, 'żółty');
